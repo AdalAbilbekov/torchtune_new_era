@@ -690,6 +690,11 @@ class AlpacaToMessages(Transform):
                 "Write a response that appropriately completes the request.\n\n"
                 "### Instruction:\n{instruction}\n\n### Response:\n"
             ),
+            "prompt_issai": (
+            "Below is an instruction that describes a task. "
+            "Write a response that appropriately completes the request.\n\n"
+            "### Instruction:\n{instruction}\n{input}\n\n### Response:\n"
+            ),
         }
 
     def __call__(self, sample: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -698,13 +703,17 @@ class AlpacaToMessages(Transform):
         key_instruction = column_map.get("instruction", "instruction")
         key_output = column_map.get("output", "output")
 
-        if key_input in sample and sample[key_input]:
-            prompt = self.template["prompt_input"].format(
+        # if key_input in sample and sample[key_input]:
+        #     prompt = self.template["prompt_input"].format(
+        #         instruction=sample[key_instruction], input=sample[key_input]
+        #     )
+        # else:
+        #     prompt = self.template["prompt_no_input"].format(
+        #         instruction=sample[key_instruction]
+        #     )
+
+        prompt = self.template["prompt_issai"].format(
                 instruction=sample[key_instruction], input=sample[key_input]
-            )
-        else:
-            prompt = self.template["prompt_no_input"].format(
-                instruction=sample[key_instruction]
             )
 
         messages = [
@@ -722,3 +731,11 @@ class AlpacaToMessages(Transform):
             ),
         ]
         return {"messages": messages}
+
+if __name__ == "__main__":
+    prompt = AlpacaToMessages()
+    print(prompt({
+        "input":"Do this",
+        "instruction": "ASdasd",
+        "output":"hello",
+    }))
