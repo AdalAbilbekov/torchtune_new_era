@@ -23,12 +23,20 @@
 # Tokenizer
 tokenizer:
   _component_: torchtune.models.llama3.llama3_tokenizer
-  path: /tmp/Meta-Llama-3.1-8B-Instruct/original/tokenizer.model
-  max_seq_len: null
+  path: /data/nvme3n1p1/adal_workspace/new_era_of_3.2/checkpoints/Meta-Llama-3.1-8B-Instruct
+  max_seq_len: 8192
 
 # Dataset
 dataset:
   _component_: torchtune.datasets.alpaca_dataset
+  source: json
+  split: train
+  data_files: /data/nvme7n1p1/critical_all/critical_instruct/2024.09.09_instruct_kk_benchmarks-hellaswag_5134445.json
+  column_map:
+    instruction: instruction
+    input: input
+    output: output
+  packed: True
 seed: null
 shuffle: True
 
@@ -38,7 +46,7 @@ model:
 
 checkpointer:
   _component_: torchtune.training.FullModelHFCheckpointer
-  checkpoint_dir: /tmp/Meta-Llama-3.1-8B-Instruct/
+  checkpoint_dir: /data/nvme3n1p1/adal_workspace/new_era_of_3.2/checkpoints/Meta-Llama-3.1-8B-Instruct
   checkpoint_files: [
     model-00001-of-00004.safetensors,
     model-00002-of-00004.safetensors,
@@ -46,7 +54,7 @@ checkpointer:
     model-00004-of-00004.safetensors
   ]
   recipe_checkpoint: null
-  output_dir: /tmp/Meta-Llama-3.1-8B-Instruct/
+  output_dir: /data/nvme3n1p1/adal_workspace/v2_new_era_of_3.2/checkpoints
   model_type: LLAMA3
 resume_from_checkpoint: False
 
@@ -76,7 +84,7 @@ dtype: bf16
 metric_logger:
   _component_: torchtune.training.metric_logging.DiskLogger
   log_dir: ${output_dir}
-output_dir: /tmp/full-llama3.1-finetune
+output_dir: /data/nvme3n1p1/adal_workspace/v2_new_era_of_3.2/logs
 log_every_n_steps: 1
 log_peak_memory_stats: False
 
