@@ -146,9 +146,9 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
 
         # Added self.cfg to apply methods of the class.
         self.cfg = cfg
-        self.all_data = load_dataset(self.dataset_cfg.source,
-                                     data_files=self.dataset_cfg.data_files,
-                                     split=self.dataset_cfg.split).shuffle(seed=42)
+        self.all_data = load_dataset(cfg.dataset.source,
+                                     data_files=cfg.dataset.data_files,
+                                     split=cfg.dataset.split).shuffle(seed=42)
         self.data_len = len(self.all_data)
 
         self._sampler, self._dataloader = None, None
@@ -159,13 +159,17 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
         if 'sub_length' in cfg:
             self.sub_length = cfg.sub_length
         else:
-            self.sub_length = 100000
+            self.sub_length = 10000
 
         if 'start_index' in cfg:
             self.start_index = cfg.start_index
         else:
             self.start_index = 0
 
+        self.resource_flag = True
+        self.sub_data = None
+
+        self.pbar = None
 
     def load_checkpoint(self, cfg_checkpointer: DictConfig) -> Dict[str, Any]:
         """
@@ -272,7 +276,7 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
         # setup after both of these are initialized
         
         # Make it attribute.
-        self.collate_name = cfg.get("collate_fn", "torchtune.data.padded_collate_sft")
+        self.collate_fn = cfg.get("collate_fn", "torchtune.data.padded_collate_sft")
         
         
         # Removed beacause of the chunking dataloader.
@@ -521,24 +525,25 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
             ds = ConcatDataset(datasets=datasets)
             packed = False
         else:
-            # TODO fix torchtune.datasets.alpaca_dataset (add self.sub_data as input arg)
-            ds = config.instantiate(self.sub_data,
-                                    cfg_dataset, 
-                                    self._tokenizer)
+            # fix torchtune.datasets.alpaca_dataset (add self.sub_data as input arg)
+            ds = config.instantiate(
+                cfg_dataset, 
+                self._tokenizer, 
+                sub_data=self.sub_data)
             packed = cfg_dataset.get("packed", False)
-
+            
         # Instantiate collate_fn
         if "left_pad_sequence" in self.collate_fn:
             raise RuntimeError("left_pad_sequence collator is only for inference.")
         collate_fn = _get_component_from_path(self.collate_fn)
 
-        self.sampler = DistributedSampler(
+        self._sampler = DistributedSampler(
             ds, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=0
         )
-        self.dataloader = DataLoader(
+        self._dataloader = DataLoader(
             dataset=ds,
             batch_size=batch_size,
-            sampler=self.sampler,
+            sampler=self._sampler,
             # dropping last avoids shape issues with compile + flex attention
             drop_last=True,
             collate_fn=partial(
@@ -566,10 +571,11 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
             ds = ConcatDataset(datasets=datasets)
             packed = False
         else:
-            # TODO fix torchtune.datasets.alpaca_dataset (add self.sub_data as input arg)
-            ds = config.instantiate(self.sub_data,
-                                    cfg_dataset, 
-                                    self._tokenizer)
+            # fix torchtune.datasets.alpaca_dataset (add self.sub_data as input arg)
+            ds = config.instantiate(
+                cfg_dataset, 
+                self._tokenizer, 
+                sub_data=self.sub_data,)
             packed = cfg_dataset.get("packed", False)
 
         # Instantiate collate_fn
@@ -600,13 +606,13 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
         asyncio.set_event_loop(loop)
         if self.resource_flag:
             loop.run_until_complete(self.set_back_dataloader(
-                cfg_dataset=self.cfg,
+                cfg_dataset=self.cfg.dataset,
                 shuffle=self.cfg.shuffle,
                 batch_size=self.cfg.batch_size
             ))
         else:
             loop.run_until_complete(self.set_sub_dataloader(
-                cfg_dataset=self.cfg,
+                cfg_dataset=self.cfg.dataset,
                 shuffle=self.cfg.shuffle,
                 batch_size=self.cfg.batch_size
             ))
@@ -634,10 +640,12 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
             ds = ConcatDataset(datasets=datasets)
             packed = False
         else:
-            # TODO fix torchtune.datasets.alpaca_dataset (add self.sub_data as input arg)
-            ds = config.instantiate(self.sub_data,
-                                    cfg_dataset, 
-                                    self._tokenizer)
+            # fix torchtune.datasets.alpaca_dataset (add self.sub_data as input arg)
+            ds = config.instantiate(
+                cfg_dataset, 
+                self._tokenizer, 
+                sub_data=self.sub_data,
+            )
             packed = cfg_dataset.get("packed", False)
 
         # Instantiate collate_fn
@@ -645,13 +653,13 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
             raise RuntimeError("left_pad_sequence collator is only for inference.")
         collate_fn = _get_component_from_path(self.collate_fn)
 
-        self.sampler = DistributedSampler(
+        self._sampler = DistributedSampler(
             ds, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=0
         )
-        self.dataloader = DataLoader(
+        self._dataloader = DataLoader(
             dataset=ds,
             batch_size=batch_size,
-            sampler=self.sampler,
+            sampler=self._sampler,
             # dropping last avoids shape issues with compile + flex attention
             drop_last=True,
             collate_fn=partial(
@@ -926,7 +934,11 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
                         i = _all_range[self.sub_index]
                         sub_range = list(range(i,min(i+self.sub_length,self.data_len)))
                         self.sub_data = self.all_data.select(sub_range)
-                        self._setup_data()
+                        self._setup_data(
+                            cfg_dataset=self.cfg.dataset,
+                            shuffle=self.cfg.shuffle,
+                            batch_size=self.cfg.batch_size
+                        )
                         
                         # next data
                         if j==self.sub_index and not _all_range_len<= j+1:
@@ -962,7 +974,11 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
                         i = _all_range[self.sub_index]
                         sub_range = list(range(i,min(i+self.sub_length,self.data_len)))
                         self.sub_data = self.all_data.select(sub_range)
-                        self._setup_data()
+                        self._setup_data(
+                            cfg_dataset=self.cfg.dataset,
+                            shuffle=self.cfg.shuffle,
+                            batch_size=self.cfg.batch_size
+                        )
 
                         if _all_range_len>self.sub_index+1:
                             i = _all_range[self.sub_index+1]
