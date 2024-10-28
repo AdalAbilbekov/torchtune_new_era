@@ -29,7 +29,7 @@ dataset:
   _component_: torchtune.datasets.alpaca_dataset
   source: json
   split: train
-  data_files: /data/nvme7n1p1/critical_all/critical_instruct/2024.09.09_instruct_kk_benchmarks-hellaswag_5134445.json
+  data_files: /data/nvme7n1p1/critical_all/critical_instruct/*.json
   column_map:
     instruction: instruction
     input: input
@@ -37,6 +37,7 @@ dataset:
   packed: True
 seed: null
 shuffle: True
+sub_length: 100000
 
 # Model Arguments
 model:
@@ -57,7 +58,7 @@ checkpointer:
 resume_from_checkpoint: False
 
 # Fine-tuning arguments
-batch_size: 2
+batch_size: 6
 epochs: 3
 
 optimizer:
@@ -82,11 +83,23 @@ compile: False # set it to True for better memory and performance
 dtype: bf16
 
 # Logging
+# metric_logger:
+#   _component_: torchtune.training.metric_logging.DiskLogger
+#   log_dir: ${output_dir}
+# output_dir: /data/nvme3n1p1/adal_workspace/v2_new_era_of_3.2/logs
+# log_every_n_steps: 1
+# log_peak_memory_stats: False
+
+
+# WanDB
 metric_logger:
-  _component_: torchtune.training.metric_logging.DiskLogger
-  log_dir: ${output_dir}
-output_dir: /data/nvme3n1p1/adal_workspace/v2_new_era_of_3.2/logs
+  _component_: torchtune.training.metric_logging.WandBLogger
+  # the W&B project to log to
+  project: adal_debug
+  name: test_new_torchtune_ci0
+output_dir: /data/nvme3n1p1/adal_workspace/db9_train/KazLLM_Bee/logs_inst
 log_every_n_steps: 1
 log_peak_memory_stats: False
+
 
 save_per_step: 1000
