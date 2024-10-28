@@ -20,7 +20,7 @@ def alpaca_dataset(
     *,
     source: str = "tatsu-lab/alpaca",
     column_map: Optional[Dict[str, str]] = None,
-    train_on_input: bool = True,
+    train_on_input: bool = True, 
     packed: bool = False,
     filter_fn: Optional[Callable] = None,
     split: str = "train",
@@ -86,12 +86,13 @@ def alpaca_dataset(
         split=split,
         **load_dataset_kwargs,
     )
+    
     if packed:
         if tokenizer.max_seq_len is None:
             raise ValueError(
                 "PackedDataset requires a max_seq_len to be set on the tokenizer."
             )
-        return PackedDataset(ds, max_seq_len=tokenizer.max_seq_len)
+        return PackedDataset(ds, max_seq_len=tokenizer.max_seq_len, padding_idx=tokenizer.pad_id)
     return ds
 
 
