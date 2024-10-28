@@ -32,6 +32,8 @@ import threading
 
 from datasets import load_dataset
 
+import math
+
 from tqdm import tqdm
 
 log = utils.get_logger("DEBUG")
@@ -825,7 +827,7 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
                 loss_to_log = running_loss.item()
                 self.pbar.update(1)
                 self.pbar.set_description(
-                    f"{curr_epoch + 1}|{self.global_step}|{self.global_step}|Loss: {loss_to_log}"
+                    f"{curr_epoch + 1}|{self.sub_index}|{self.global_step}|Loss: {loss_to_log}"
                 )
 
                 # Log per-step metrics
@@ -835,9 +837,10 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
                 ):
                     time_per_step = time.perf_counter() - t0
                     log_dict = {
-                        "loss": loss_to_log,
-                        "lr": self._optimizer.param_groups[0]["lr"],
-                        "tokens_per_second_per_gpu": num_tokens / time_per_step,
+                        "train/loss": loss_to_log,
+                        'train/perplexity': math.exp(loss_to_log),
+                        "train/lr": self._optimizer.param_groups[0]["lr"],
+                        "train/tokens_per_second_per_gpu": num_tokens / time_per_step,
                     }
                     if self._log_peak_memory_stats:
                         log_dict.update(
@@ -873,7 +876,7 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
                 self._profiler.step()
 
             if self.global_step % self.cfg.save_per_step == 0:
-                self.save_checkpoint(epoch=self.global_step + 1)
+                self.save_checkpoint(epoch=self.global_step)
 
             pass
 
@@ -990,6 +993,8 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
                         self.sub_train(curr_epoch=curr_epoch,world_size=world_size,rank=rank)
                     
                         self.resource_flag=False
+
+                self.sub_index += 1
 
             self.epochs_run += 1
             # self.save_checkpoint(epoch=curr_epoch)
