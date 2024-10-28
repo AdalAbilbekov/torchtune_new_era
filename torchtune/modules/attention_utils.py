@@ -100,6 +100,7 @@ def create_block_causal_mask(seq_lens: List[torch.Tensor]) -> torch.Tensor:
     batch_block_attn_masks = []
     batch_size = len(seq_lens)
     for sample_idx in range(batch_size):
+        # TODO apply trapezoidal masking
         block_attn_masks = [
             torch.tril(
                 torch.ones(seq_len, seq_len, dtype=torch.bool, device=seq_len.device)
