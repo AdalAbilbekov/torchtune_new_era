@@ -346,13 +346,14 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
 
         # sampler and dataloader depend on the tokenizer and loss_fn and should be
         # setup after both of these are initialized
-        collate_name = cfg.get("collate_fn", "torchtune.data.padded_collate_sft")
-        self._sampler, self._dataloader = self._setup_data(
-            cfg_dataset=cfg.dataset,
-            shuffle=cfg.shuffle,
-            batch_size=cfg.batch_size,
-            collate_fn=collate_name,
-        )
+        self.collate_name = cfg.get("collate_fn", "torchtune.data.padded_collate_sft")
+        # Removed sampler and dataloader intialization because of the async data prep.
+        # self._sampler, self._dataloader = self._setup_data(
+        #     cfg_dataset=cfg.dataset,
+        #     shuffle=cfg.shuffle,
+        #     batch_size=cfg.batch_size,
+        #     collate_fn=collate_name,
+        # )
 
         # Finally update the recipe state which can only be correctly set after all of the
         # other components have been initialized and updated.
@@ -361,15 +362,16 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
         # by the dataloader, the max_steps_per_epoch param set by the user and the
         # gradient_accumulation_steps param. This value is used for logging and tracking
         # training state. The computation should happen after the dataloader has been setup
-        self._steps_per_epoch = (
-            len(self._dataloader) // self._gradient_accumulation_steps
-        )
-        if (
-            self.max_steps_per_epoch is not None
-            and self.max_steps_per_epoch < self._steps_per_epoch
-        ):
-            self._steps_per_epoch = self.max_steps_per_epoch
-        self.global_step = self.epochs_run * self._steps_per_epoch
+        # Removed beacause of the chunking dataloader.
+        # self._steps_per_epoch = (
+        #     len(self._dataloader) // self._gradient_accumulation_steps
+        # )
+        # if (
+        #     self.max_steps_per_epoch is not None
+        #     and self.max_steps_per_epoch < self._steps_per_epoch
+        # ):
+        #     self._steps_per_epoch = self.max_steps_per_epoch
+        # self.global_step = self.epochs_run * self._steps_per_epoch
 
         # Setup lr scheduler
         self._lr_scheduler = self._setup_lr_scheduler(
