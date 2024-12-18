@@ -9,8 +9,9 @@ import torch
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 from torchtune.data._common import CROSS_ENTROPY_IGNORE_IDX, PACK_TYPE
-from torchtune.modules.attention_utils import packed_block_causal_mask
+from torchtune.modules.attention_utils import packed_block_causal_mask, create_block_causal_mask
 
+import pdb
 
 def left_pad_sequence(
     sequences: List[torch.Tensor],
@@ -160,6 +161,7 @@ def padded_collate_sft(
     batch: List[Dict[str, List[int]]],
     padding_idx: int = 0,
     ignore_idx: int = CROSS_ENTROPY_IGNORE_IDX,
+    masking_true: bool = False,   # Added to control the masking process with and without masking.
 ) -> Dict[str, torch.Tensor]:
     """Pad a batch of sequences to the longest sequence length in the batch, and
     convert integer lists to tensors.
@@ -201,18 +203,44 @@ def padded_collate_sft(
     input_ids_seq_len = input_ids.shape[-1]
     labels_seq_len = labels.shape[-1]
 
-    # Hack to pad correctly and not use max_seq_len, which is costly
-    if input_ids_seq_len > labels_seq_len:
-        labels = F.pad(
-            labels, (0, input_ids_seq_len - labels_seq_len), value=ignore_idx
-        )
-    elif labels_seq_len > input_ids_seq_len:
-        input_ids = F.pad(
-            input_ids,
-            (0, labels_seq_len - input_ids_seq_len),
-            value=padding_idx,
-        )
-    return {"tokens": input_ids.long(), "labels": labels.long()}
+    if masking_true:
+        seq_lens = [torch.tensor([len(x["tokens"])]) for x in batch]
+        seq_lens_max = [max(seq_lens) for _ in range(len(seq_lens))]
+        labels_diag = []
+        for label in labels:
+            try:
+                labels_diag.append(label.tolist().index(128006))
+            except:
+                labels_diag.append(1)
+        # Adding masking process due to the lack of masking.
+        block_mask = create_block_causal_mask(seq_lens=seq_lens_max, labels=labels_diag)
+
+        # Hack to pad correctly and not use max_seq_len, which is costly
+        if input_ids_seq_len > labels_seq_len:
+            labels = F.pad(
+                labels, (0, input_ids_seq_len - labels_seq_len), value=ignore_idx
+            )
+        elif labels_seq_len > input_ids_seq_len:
+            input_ids = F.pad(
+                input_ids,
+                (0, labels_seq_len - input_ids_seq_len),
+                value=padding_idx,
+            )
+        return {"tokens": input_ids.long(), 
+                "labels": labels.long(),
+                "mask": block_mask}
+    else:#The original code just follows the logic of else condition.
+        if input_ids_seq_len > labels_seq_len:
+            labels = F.pad(
+                labels, (0, input_ids_seq_len - labels_seq_len), value=ignore_idx
+            )
+        elif labels_seq_len > input_ids_seq_len:
+            input_ids = F.pad(
+                input_ids,
+                (0, labels_seq_len - input_ids_seq_len),
+                value=padding_idx,
+            )
+        return {"tokens": input_ids.long(), "labels": labels.long()}
 
 
 # TODO: Generalize this to support any type of encoder input, right now this assumes
@@ -492,9 +520,19 @@ def padded_collate_packed(
     labels = torch.stack([x["labels"] for x in batch])
     input_pos = torch.stack([x["input_pos"] for x in batch])
     seq_lens = [x["seq_lens"] for x in batch]
+    # pdb.set_trace()
 
+    # labels_no_ice = [i.item() for i in labels[0] if i.item() != -100]
+    # # pdb.set_trace()
+    # str_labels = " ".join(map(str, labels_no_ice))
+    # list_of_strings= str_labels.split("128006")
+    # list_of_lists = [len(list(map(int, f"126006 {seq}".split()))) + 1 for seq in list_of_strings[1:]]
+    
+    # list_of_lists.append(seq_lens[0][-1].item())
+    # pdb.set_trace()
     block_mask = packed_block_causal_mask(
         seq_lens=seq_lens,
+        # labels=list_of_lists
     )
 
     return {

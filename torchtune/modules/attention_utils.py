@@ -6,7 +6,7 @@
 
 import logging
 from typing import Callable, List, Optional, Union
-
+import pdb
 import torch
 
 from torch import nn
@@ -73,7 +73,10 @@ def _get_document_ids_from_seq_lens(
     return batch_document_ids
 
 
-def create_block_causal_mask(seq_lens: List[torch.Tensor]) -> torch.Tensor:
+def create_block_causal_mask(
+        seq_lens: List[torch.Tensor],
+        labels = None
+        ) -> torch.Tensor:
     """
     Given a batch tensor of seq lens defining the lengths of samples in each pack,
     Construct a 2D block causal mask for each pack in the batch. For example, if
@@ -99,21 +102,36 @@ def create_block_causal_mask(seq_lens: List[torch.Tensor]) -> torch.Tensor:
     """
     batch_block_attn_masks = []
     batch_size = len(seq_lens)
-    for sample_idx in range(batch_size):
-        # TODO apply trapezoidal masking
-        block_attn_masks = [
-            torch.tril(
-                torch.ones(seq_len, seq_len, dtype=torch.bool, device=seq_len.device)
-            )
-            for i, seq_len in enumerate(seq_lens[sample_idx])
-        ]
-
-        batch_block_attn_masks.append(torch.block_diag(*block_attn_masks))
+    if labels is None:
+        for sample_idx in range(batch_size):
+            block_attn_masks = [
+                torch.tril(
+                    torch.ones(seq_len, seq_len, dtype=torch.bool, device=seq_len.device)
+                )
+                for i, seq_len in enumerate(seq_lens[sample_idx])
+            ]
+            batch_block_attn_masks.append(torch.block_diag(*block_attn_masks))
+    else:
+        for sample_idx in range(batch_size):
+            # TODO apply trapezoidal masking
+            block_attn_masks = [
+                torch.tril(
+                    torch.ones(seq_len, seq_len, dtype=torch.bool, device=seq_len.device), diagonal=labels[sample_idx]
+                )
+                for seq_len in seq_lens[sample_idx]
+            ]
+            # for seq_len in seq_lens[sample_idx]:
+            #     print(f"{labels[sample_idx]} | {seq_len}")
+            #     block_attn_masks = [torch.tril(
+            #         torch.ones(seq_len, seq_len, dtype=torch.bool, device=seq_len.device), diagonal=labels[sample_idx]
+            #     )]
+            batch_block_attn_masks.append(*block_attn_masks)
     return torch.stack(batch_block_attn_masks)
 
 
 def packed_block_causal_mask(
     seq_lens: List[torch.Tensor],
+    # labels: None
 ) -> _MaskType:
     """
     Create a block causal document mask for a batch of packed sequences. If on
@@ -236,7 +254,7 @@ def _sdpa_or_flex_attention() -> Callable:
             # shape: [b, 1, s, s]
             if mask is not None:
                 mask = mask[:, None, :, :]
-
+                
             # Flash attention from https://pytorch.org/blog/accelerating-large-language-models/
             return nn.functional.scaled_dot_product_attention(
                 q,

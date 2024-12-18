@@ -875,7 +875,7 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
                 # will include multiple forward / backward passes if gradient accumulation > 1
                 self._profiler.step()
 
-            if self.global_step % self.cfg.save_per_step == 0:
+            if self.global_step % self.cfg.save_per_step == 0 and self.global_step != 0:
                 self.save_checkpoint(epoch=self.global_step)
 
             pass
