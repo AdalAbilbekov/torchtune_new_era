@@ -666,7 +666,7 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
         cfg_dataset: DictConfig,
         shuffle: bool,
         batch_size: int,
-        collate_fn: str,
+        # collate_fn: str,
     ) -> Tuple[DistributedSampler, DataLoader]:
         """
         All data related setup happens here. Currently this recipe only supports the
@@ -683,7 +683,12 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
             ds = ConcatDataset(datasets=datasets)
             packed = False
         else:
-            ds = config.instantiate(cfg_dataset, self._tokenizer)
+            # TODO: fix torchtune.datasets.alpaca_dataset (add self.sub_data as input arg)
+            ds = config.instantiate(
+                cfg_dataset, 
+                self._tokenizer,
+                sub_data=self.sub_data
+                )
             packed = cfg_dataset.get("packed", False)
 
         # Instantiate collate_fn
@@ -691,13 +696,13 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
             raise RuntimeError("left_pad_sequence collator is only for inference.")
         collate_fn = _get_component_from_path(collate_fn)
 
-        sampler = DistributedSampler(
+        self._sampler = DistributedSampler(
             ds, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=0
         )
-        dataloader = DataLoader(
+        self._dataloader = DataLoader(
             dataset=ds,
             batch_size=batch_size,
-            sampler=sampler,
+            sampler=self._sampler,
             # dropping last avoids shape issues with compile + flex attention
             drop_last=True,
             collate_fn=(
@@ -713,7 +718,8 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
 
         utils.log_rank_zero(log, "Dataset and Sampler are initialized.")
 
-        return sampler, dataloader
+        # Removed sampler and dataloader (convered to self argument)
+        # return sampler, dataloader
 
     def train(self) -> None:
         """
