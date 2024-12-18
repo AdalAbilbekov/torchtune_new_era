@@ -666,16 +666,92 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
         cfg_dataset: DictConfig,
         shuffle: bool,
         batch_size: int,):
-        # TODO: Sampler and Dataloader preparation.
-        pass
+        # Sampler and Dataloader preparation.
+        world_size, rank = training.get_world_size_and_rank()
 
+        if isinstance(cfg_dataset, ListConfig):
+            datasets = [
+                config.instantiate(single_cfg_dataset, self._tokenizer)
+                for single_cfg_dataset in cfg_dataset
+            ]
+            ds = ConcatDataset(datasets=datasets)
+            packed = False
+        else:
+            # fix torchtune.datasets.alpaca_dataset (add self.sub_data as input arg)
+            ds = config.instantiate(
+                cfg_dataset, 
+                self._tokenizer, 
+                sub_data=self.sub_data)
+            packed = cfg_dataset.get("packed", False)
+            
+        # Instantiate collate_fn
+        if "left_pad_sequence" in self.collate_fn:
+            raise RuntimeError("left_pad_sequence collator is only for inference.")
+        collate_fn = _get_component_from_path(self.collate_fn)
+
+        self._sampler = DistributedSampler(
+            ds, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=0
+        )
+        self._dataloader = DataLoader(
+            dataset=ds,
+            batch_size=batch_size,
+            sampler=self._sampler,
+            # dropping last avoids shape issues with compile + flex attention
+            drop_last=True,
+            collate_fn=partial(
+                collate_fn,
+                padding_idx=self._tokenizer.pad_id,
+                ignore_idx=self._loss_fn.ignore_index,
+            )
+            if not packed
+            else padded_collate_packed,
+        )
+        
     async def set_sub_dataloader(
         self,
         cfg_dataset: DictConfig,
         shuffle: bool,
         batch_size: int,):
         # TODO: Sampler and Dataloader preparation.
-        pass
+        world_size, rank = training.get_world_size_and_rank()
+
+        if isinstance(cfg_dataset, ListConfig):
+            datasets = [
+                config.instantiate(single_cfg_dataset, self._tokenizer)
+                for single_cfg_dataset in cfg_dataset
+            ]
+            ds = ConcatDataset(datasets=datasets)
+            packed = False
+        else:
+            # fix torchtune.datasets.alpaca_dataset (add self.sub_data as input arg)
+            ds = config.instantiate(
+                cfg_dataset, 
+                self._tokenizer, 
+                sub_data=self.sub_data,)
+            packed = cfg_dataset.get("packed", False)
+
+        # Instantiate collate_fn
+        if "left_pad_sequence" in self.collate_fn:
+            raise RuntimeError("left_pad_sequence collator is only for inference.")
+        collate_fn = _get_component_from_path(self.collate_fn)
+
+        self.sampler = DistributedSampler(
+            ds, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=0
+        )
+        self.dataloader = DataLoader(
+            dataset=ds,
+            batch_size=batch_size,
+            sampler=self.sampler,
+            # dropping last avoids shape issues with compile + flex attention
+            drop_last=True,
+            collate_fn=partial(
+                collate_fn,
+                padding_idx=self._tokenizer.pad_id,
+                ignore_idx=self._loss_fn.ignore_index,
+            )
+            if not packed
+            else padded_collate_packed,
+        )
 
     def start_sub_task(self):
             loop = asyncio.new_event_loop()
