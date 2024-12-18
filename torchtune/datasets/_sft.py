@@ -107,7 +107,7 @@ class SFTDataset(Dataset):
         self._message_transform = message_transform
         self._model_transform = model_transform
 
-        self._data = load_dataset(source, **load_dataset_kwargs)
+        self._data = load_dataset_kwargs.get("sub_data", None)
         if filter_fn is not None:
             self._data = self._data.filter(filter_fn)
 
