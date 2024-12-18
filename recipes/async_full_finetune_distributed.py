@@ -660,6 +660,39 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
 
             utils.log_rank_zero(log, "Optimizer is initialized.")
             return optimizer
+    
+    async def set_back_dataloader(
+        self,
+        cfg_dataset: DictConfig,
+        shuffle: bool,
+        batch_size: int,):
+        # TODO: Sampler and Dataloader preparation.
+        pass
+
+    async def set_sub_dataloader(
+        self,
+        cfg_dataset: DictConfig,
+        shuffle: bool,
+        batch_size: int,):
+        # TODO: Sampler and Dataloader preparation.
+        pass
+
+    def start_sub_task(self):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            if self.resource_flag:
+                loop.run_until_complete(self.set_back_dataloader(
+                    cfg_dataset=self.cfg.dataset,
+                    shuffle=self.cfg.shuffle,
+                    batch_size=self.cfg.batch_size
+                ))
+            else:
+                loop.run_until_complete(self.set_sub_dataloader(
+                    cfg_dataset=self.cfg.dataset,
+                    shuffle=self.cfg.shuffle,
+                    batch_size=self.cfg.batch_size
+                ))
+            loop.close()
 
     def _setup_data(
         self,
@@ -683,7 +716,7 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
             ds = ConcatDataset(datasets=datasets)
             packed = False
         else:
-            # TODO: fix torchtune.datasets.alpaca_dataset (add self.sub_data as input arg)
+            # fix torchtune.datasets.alpaca_dataset (add self.sub_data as input arg)
             ds = config.instantiate(
                 cfg_dataset, 
                 self._tokenizer,
