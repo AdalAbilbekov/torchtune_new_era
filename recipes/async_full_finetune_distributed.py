@@ -1038,13 +1038,96 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
         for curr_epoch in range(self.epochs_run, self.total_epochs):
             # Update the sampler to ensure data is correctly shuffled across epochs
             # in case shuffle is True
-            self._sampler.set_epoch(curr_epoch)
+            _all_range = list(range(0, self.data_len, min(self.data_len, self.sub_length)))
+            
+            self.loader_len = None
+            _all_range_len = len(_all_range)
+            self._all_range_len = _all_range_len
 
-            pbar = tqdm(total=self._steps_per_epoch, disable=not (rank == 0))
-            # TODO: Rewrite the current trainig loop with sub_train() function.
-            num_sub_trains = None
-            for _ in num_sub_trains:
-                self.sub_train()
+
+            # Rewrite the current trainig loop with sub_train() function.
+            for j in range(_all_range_len):
+                if j < self.start_index:
+                    continue
+
+                if self.resource_flag:
+                    if self._sampler and self._dataloader:
+                        if j==self.sub_index and not _all_range_len<= j+1:
+                            i = _all_range[self.sub_index+1]
+                            sub_range = list(range(i,min(i+self.sub_length,self.data_len)))
+                            self.sub_data = self.all_data.select(sub_range)
+                            sub_task_thread = threading.Thread(target=self.start_sub_task)
+                            sub_task_thread.start()
+
+                        self.sub_train(curr_epoch=curr_epoch,world_size=world_size,rank=rank)
+                        
+                        if j==self.sub_index and not _all_range_len<= j+1:
+                            sub_task_thread.join()
+
+                        self.resource_flag=False
+                    else:
+                        i = _all_range[self.sub_index]
+                        sub_range = list(range(i,min(i+self.sub_length,self.data_len)))
+                        self.sub_data = self.all_data.select(sub_range)
+                        self._setup_data(
+                            cfg_dataset=self.cfg.dataset,
+                            shuffle=self.cfg.shuffle,
+                            batch_size=self.cfg.batch_size
+                        )
+                        
+                        # next data
+                        if j==self.sub_index and not _all_range_len<= j+1:
+                            i = _all_range[self.sub_index+1]
+                            sub_range = list(range(i,min(i+self.sub_length, self.data_len)))
+                            self.sub_data = self.all_data.select(sub_range)
+                            sub_task_thread = threading.Thread(target=self.start_sub_task)
+                            sub_task_thread.start()
+
+                        self.sub_train(curr_epoch=curr_epoch,world_size=world_size,rank=rank)
+                        
+                        if j==self.sub_index and not _all_range_len<= j+1:
+                            sub_task_thread.join()
+
+                        self.resource_flag=False
+                else:
+                    if self.back_sample and self.back_dataloader:
+                        if j==self.sub_index and not _all_range_len<= j+1:
+                            i = _all_range[self.sub_index+1]
+                            sub_range = list(range(i,min(i+self.sub_length,self.data_len)))
+                            self.sub_data = self.all_data.select(sub_range)
+                            sub_task_thread = threading.Thread(target=self.start_sub_task)
+                            sub_task_thread.start()
+
+                        self.sub_train(curr_epoch=curr_epoch,world_size=world_size,rank=rank)
+
+                        if j==self.sub_index and not _all_range_len< j+1:
+                            sub_task_thread.join()
+                        self.resource_flag=True
+                    else:
+                        self.resource_flag=True
+
+                        i = _all_range[self.sub_index]
+                        sub_range = list(range(i,min(i+self.sub_length,self.data_len)))
+                        self.sub_data = self.all_data.select(sub_range)
+                        self._setup_data(
+                            cfg_dataset=self.cfg.dataset,
+                            shuffle=self.cfg.shuffle,
+                            batch_size=self.cfg.batch_size
+                        )
+
+                        if _all_range_len>self.sub_index+1:
+                            i = _all_range[self.sub_index+1]
+                            sub_range = list(range(i,min(i+self.sub_length,self.data_len)))
+                            self.sub_data = self.all_data.select(sub_range)
+                            sub_task_thread = threading.Thread(target=self.start_sub_task)
+                            sub_task_thread.start()
+
+                        self.sub_train(curr_epoch=curr_epoch,world_size=world_size,rank=rank)
+                    
+                        self.resource_flag=False
+
+                self.sub_index += 1
+
 
             self.epochs_run += 1
             self._checkpoint_client.save_checkpoint(
