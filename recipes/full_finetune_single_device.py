@@ -24,6 +24,8 @@ from torchtune.datasets import ConcatDataset
 from torchtune.recipe_interfaces import FTRecipeInterface
 from torchtune.training import DummyProfiler, PROFILER_KEY
 
+import pdb
+
 from tqdm import tqdm
 
 
@@ -148,7 +150,6 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             resume_from_checkpoint=self._resume_from_checkpoint,
         )
         checkpoint_dict = self._checkpointer.load_checkpoint()
-
         if self._resume_from_checkpoint:
             self._update_recipe_state(checkpoint_dict)
         return checkpoint_dict
@@ -216,6 +217,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             model_state_dict=ckpt_dict[training.MODEL_KEY],
         )
         self._tokenizer = config.instantiate(cfg.tokenizer)
+
         log.info("Tokenizer is initialized from file.")
 
         # _setup_optimizer should take in ckpt_dict only if training is resumed from
@@ -249,7 +251,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             batch_size=cfg.batch_size,
             collate_fn=collate_name,
         )
-
+        
         # Finally update the recipe state which can only be correctly set after all of the
         # other components have been initialized and updated.
         #
@@ -503,7 +505,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
         if "left_pad_sequence" in collate_fn:
             raise RuntimeError("left_pad_sequence collator is only for inference.")
         collate_fn = _get_component_from_path(collate_fn)
-
+        
         sampler = DistributedSampler(
             ds,
             num_replicas=1,
@@ -521,11 +523,11 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
                 collate_fn,
                 padding_idx=self._tokenizer.pad_id,
                 ignore_idx=self._loss_fn.ignore_index,
+                masking_true=True,
             )
             if not packed
             else padded_collate_packed,
         )
-
         log.info("Dataset and Sampler are initialized.")
 
         return sampler, dataloader
@@ -572,8 +574,42 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             labels = labels.reshape(-1)
             logits = logits.reshape(-1, logits.size(-1))
 
+        # print("Debug")
+        # print("="*100)
+        # print("Batch")
+        # print(batch)
+        # print("Encoded Input")
+        # print(batch["tokens"][0])
+        # print("Decoded input:")
+        # print(self._tokenizer.decode(batch["tokens"][0], skip_special_tokens=False))
+        # print("="*100)
+        # print("="*100)
+        # print("Input mask shape")
+        # print(batch["mask"].shape)
+        # print("Input mask")
+        # print(batch["mask"])
+
+        # print("="*100)
+        # print("="*100)
+        # print("Encoded Labels:")
+        # print(labels)
+        # print("Decoded Labels:")
+        # print(self._tokenizer.decode([tok.item() for tok in labels[0] if not tok.item() == -100], skip_special_tokens=False))
+        
+        # print("="*100)
+        # print("="*100)
+        # print("Encoded Ouput:")
+        # print(logits[0].argmax(dim=-1))
+        # print("Decoded Output:")
+        # print(self._tokenizer.decode(logits[0].argmax(dim=-1)[0], skip_special_tokens=False))
+
+
+        # print("="*100)
+        # print("="*100)
+
         # Compute loss
         loss = self._loss_fn(logits, labels)
+        # pdb.set_trace()
         # free logits otherwise it peaks backward memory
         del logits
 
