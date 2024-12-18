@@ -32,6 +32,13 @@ from torchtune.training.checkpointing._checkpoint_client import (
 )
 from torchtune.training.lr_schedulers import get_lr
 
+import asyncio
+import threading
+
+from datasets import load_dataset
+
+import math
+
 from tqdm import tqdm
 
 log = utils.get_logger("DEBUG")
@@ -194,6 +201,33 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
         self.total_epochs = cfg.epochs
         self.max_steps_per_epoch = cfg.max_steps_per_epoch
         self.global_step = 0
+
+        # Added self.cfg to apply methods of the class.
+        self.cfg = cfg
+        self.all_data = load_dataset(cfg.dataset.source,
+                                     data_files=cfg.dataset.data_files,
+                                     split=cfg.dataset.split).shuffle(seed=42)
+        self.data_len = len(self.all_data)
+
+        self._sampler, self._dataloader = None, None
+        self.back_sample, self.back_dataloader = None, None
+
+        self.sub_index = 0
+
+        if 'sub_length' in cfg:
+            self.sub_length = cfg.sub_length
+        else:
+            self.sub_length = 10000
+
+        if 'start_index' in cfg:
+            self.start_index = cfg.start_index
+        else:
+            self.start_index = 0
+
+        self.resource_flag = True
+        self.sub_data = None
+
+        self.pbar = None
 
     def _update_recipe_state(self, ckpt_dict: Dict[str, Any]) -> None:
         """
