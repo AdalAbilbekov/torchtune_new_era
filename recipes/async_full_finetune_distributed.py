@@ -346,7 +346,7 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
 
         # sampler and dataloader depend on the tokenizer and loss_fn and should be
         # setup after both of these are initialized
-        self.collate_name = cfg.get("collate_fn", "torchtune.data.padded_collate_sft")
+        self.collate_fn = cfg.get("collate_fn", "torchtune.data.padded_collate_sft")
         # Removed sampler and dataloader intialization because of the async data prep.
         # self._sampler, self._dataloader = self._setup_data(
         #     cfg_dataset=cfg.dataset,
@@ -376,7 +376,8 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
         # Setup lr scheduler
         self._lr_scheduler = self._setup_lr_scheduler(
             cfg_lr_scheduler=cfg.get("lr_scheduler", None),
-            num_training_steps=self.total_epochs * self._steps_per_epoch,
+            # num_training_steps=self.total_epochs * self._steps_per_epoch,
+            num_training_steps=100000, #tmp solution due to the inability to count total num. steps
             last_epoch=self.global_step - 1,
         )
 
@@ -801,9 +802,9 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
             packed = cfg_dataset.get("packed", False)
 
         # Instantiate collate_fn
-        if "left_pad_sequence" in collate_fn:
+        if "left_pad_sequence" in self.collate_fn:
             raise RuntimeError("left_pad_sequence collator is only for inference.")
-        collate_fn = _get_component_from_path(collate_fn)
+        collate_fn = _get_component_from_path(self.collate_fn)
 
         self._sampler = DistributedSampler(
             ds, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=0
@@ -816,7 +817,7 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
             drop_last=True,
             collate_fn=(
                 partial(
-                    collate_fn,
+                    self.collate_fn,
                     padding_idx=self._tokenizer.pad_id,
                     ignore_idx=self._loss_fn.ignore_index,
                 )
