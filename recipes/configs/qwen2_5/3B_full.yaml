@@ -17,21 +17,30 @@
 # Single device full finetuning requires more memory optimizations. It's
 # best to use 3B_full_single_device.yaml for those cases
 
-output_dir: /tmp/torchtune/qwen2_5_3B/full # /tmp may be deleted by your system. Change it to your preference.
+output_dir: /data/nvme1n1p1/adal_abilbekov/qwen_3_checkpoints
 
 # Tokenizer
 tokenizer:
   _component_: torchtune.models.qwen2_5.qwen2_5_tokenizer
-  path: /tmp/Qwen2_5-3B-Instruct/vocab.json
-  merges_file: /tmp/Qwen2_5-3B-Instruct/merges.txt
-  max_seq_len: null
+  path: /data/nvme3n1p1/adal_workspace/models/models--Qwen--Qwen2.5-3B-Instruct/snapshots/aa8e72537993ba99e69dfaafa59ed015b17504d1/vocab.json
+  merges_file: /data/nvme3n1p1/adal_workspace/models/models--Qwen--Qwen2.5-3B-Instruct/snapshots/aa8e72537993ba99e69dfaafa59ed015b17504d1/merges.txt
+  max_seq_len: 1024
 
 # Dataset
 dataset:
   _component_: torchtune.datasets.alpaca_cleaned_dataset
-  packed: False  # True increases speed
+  source: json
+  split: train
+  data_files: /data/nvme7n1p1/critical_all/critical_instruct/2024.09.09_instruct_kk_benchmarks-mmlu_17725926.json
+  template: torchtune.data.AlpacaInstructTemplate
+  column_map:
+    instruction: instruction
+    input: input
+    output: output
+  max_seq_len: 1024
+  packed: True
 seed: null
-shuffle: True
+shuffle: False
 
 # Model Arguments
 model:
@@ -39,19 +48,20 @@ model:
 
 checkpointer:
   _component_: torchtune.training.FullModelHFCheckpointer
-  checkpoint_dir: /tmp/Qwen2_5-3B-Instruct
+  checkpoint_dir: /data/nvme3n1p1/adal_workspace/models/models--Qwen--Qwen2.5-3B-Instruct/snapshots/aa8e72537993ba99e69dfaafa59ed015b17504d1
   checkpoint_files: [
     model-00001-of-00002.safetensors,
     model-00002-of-00002.safetensors,
   ]
   recipe_checkpoint: null
-  output_dir: ${output_dir}
+  output_dir: /data/nvme1n1p1/adal_abilbekov/qwen_3_checkpoints
   model_type: QWEN2
 resume_from_checkpoint: False
 
 # Fine-tuning arguments
-batch_size: 2
+batch_size: 1
 epochs: 1
+save_per_step: 20
 optimizer:
   _component_: torch.optim.AdamW
   fused: True
@@ -59,7 +69,7 @@ optimizer:
 loss:
   _component_: torchtune.modules.loss.CEWithChunkedOutputLoss
 max_steps_per_epoch: null
-gradient_accumulation_steps: 8  # Use to increase effective batch size
+gradient_accumulation_steps: 1  # Use to increase effective batch size
 compile: False  # torch.compile the model + loss, True increases speed + decreases memory
 optimizer_in_bwd: False  # True saves memory. Requires gradient_accumulation_steps=1
 
@@ -76,7 +86,7 @@ dtype: bf16
 # Logging
 metric_logger:
   _component_: torchtune.training.metric_logging.DiskLogger
-  log_dir: ${output_dir}/logs
+  log_dir: /data/nvme3n1p1/adal_workspace/v2_new_era_of_3.2/logs
 log_every_n_steps: 1
 log_peak_memory_stats: False
 
@@ -87,7 +97,7 @@ profiler:
   enabled: False
 
   #Output directory of trace artifacts
-  output_dir: ${output_dir}/profiling_outputs
+  output_dir: /data/nvme3n1p1/adal_workspace/v2_new_era_of_3.2/profiling_outputs
 
   #`torch.profiler.ProfilerActivity` types to trace
   cpu: True
@@ -105,3 +115,6 @@ profiler:
   warmup_steps: 3
   active_steps: 2
   num_cycles: 1
+
+sub_length: 1000
+train_type: instruct
