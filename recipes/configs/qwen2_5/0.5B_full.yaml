@@ -13,7 +13,7 @@
 #
 # This config is for fine-tuning on 2+ GPUs.
 
-output_dir: /tmp/torchtune/qwen2_5_0_5B/full # /tmp may be deleted by your system. Change it to your preference.
+output_dir: _ # /tmp may be deleted by your system. Change it to your preference.
 
 # Model arguments
 model:
@@ -22,32 +22,44 @@ model:
 # Tokenizer
 tokenizer:
   _component_: torchtune.models.qwen2_5.qwen2_5_tokenizer
-  path: /tmp/Qwen2.5-0.5B-Instruct/vocab.json
-  merges_file: /tmp/Qwen2.5-0.5B-Instruct/merges.txt
-  max_seq_len: null
+  path: _/vocab.json
+  merges_file: _/merges.txt
+  max_seq_len: 896
 
 # Checkpointer
 checkpointer:
   _component_: torchtune.training.FullModelHFCheckpointer
-  checkpoint_dir: /tmp/Qwen2.5-0.5B-Instruct
-  checkpoint_files: [model.safetensors]
+  checkpoint_dir: _/Qwen2.5-0.5B-subword-Instruct
+  checkpoint_files: [
+    model.safetensors
+    ]
   recipe_checkpoint: null
-  output_dir: ${output_dir}
+  output_dir: _/qwen_0.5B_finetuned
   model_type: QWEN2
 resume_from_checkpoint: False
 
 # Dataset
 dataset:
   _component_: torchtune.datasets.alpaca_cleaned_dataset
-  packed: False  # True increases speed
+  source: json
+  split: train
+  data_files: _/*.json
+  template: torchtune.data.AlpacaInstructTemplate
+  column_map:
+    instruction: instruction
+    input: input
+    output: output
+  max_seq_len: 896
+  packed: True
 seed: null
-shuffle: True
+shuffle: False
 
 # Fine-tuning arguments
-epochs: 1
+epochs: 10
 max_steps_per_epoch: null
-batch_size: 2
-gradient_accumulation_steps: 8  # Use to increase effective batch size
+save_per_step: 5000
+batch_size: 16
+gradient_accumulation_steps: 1  # Use to increase effective batch size
 optimizer:
   _component_: torch.optim.AdamW
   fused: True
@@ -66,12 +78,21 @@ dtype: bf16
 compile: False  # torch.compile the model + loss, True increases speed + decreases memory
 
 # Logging
-metric_logger:
-  _component_: torchtune.training.metric_logging.DiskLogger
-  log_dir: ${output_dir}/logs
-log_every_n_steps: 1
-log_peak_memory_stats: True
+# metric_logger:
+#   _component_: torchtune.training.metric_logging.DiskLogger
+#   log_dir: /raid/adal_abilbekov/workspace/torchtune_new_era/logs
+# log_every_n_steps: 1
+# log_peak_memory_stats: False
 
+metric_logger:
+  _component_: torchtune.training.metric_logging.WandBLogger
+  # the W&B project to log to
+  project: _
+  name: _
+  log_dir: _/logs
+# output_dir: /raid/adal_abilbekov/workspace/torchtune_new_era/logs
+log_every_n_steps: 1
+log_peak_memory_stats: False
 
 # Profiler (disabled)
 profiler:
@@ -79,7 +100,7 @@ profiler:
   enabled: False
 
   #Output directory of trace artifacts
-  output_dir: ${output_dir}/profiling_outputs
+  output_dir: _/profiling_outputs
 
   #`torch.profiler.ProfilerActivity` types to trace
   cpu: True
@@ -97,3 +118,6 @@ profiler:
   warmup_steps: 3
   active_steps: 2
   num_cycles: 1
+
+sub_length: 100000
+train_type: instruct
