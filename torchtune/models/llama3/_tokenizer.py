@@ -11,6 +11,8 @@ from torchtune.data import Message, PromptTemplate, truncate
 from torchtune.modules.tokenizers import ModelTokenizer, TikTokenBaseTokenizer
 from torchtune.modules.transforms import Transform
 
+from transformers import AutoTokenizer
+
 
 CL100K_PATTERN = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""  # noqa
 
@@ -102,14 +104,22 @@ class Llama3Tokenizer(ModelTokenizer, Transform):
         # During generation, stop when either eos_id, eot_id, or eom_id is encountered
         self.stop_tokens = [self.eos_id, self.eot_id, self.eom_id]
 
-        self.tt_model = TikTokenBaseTokenizer(
-            path=path,
-            name="llama3_tiktoken",
-            pattern=CL100K_PATTERN,
-            bos_id=self.bos_id,
-            eos_id=self.eos_id,
-            special_tokens=self.special_tokens,
-        )
+        # self.tt_model = TikTokenBaseTokenizer(
+        #     path=path,
+        #     name="llama3_tiktoken",
+        #     pattern=CL100K_PATTERN,
+        #     bos_id=self.bos_id,
+        #     eos_id=self.eos_id,
+        #     special_tokens=self.special_tokens,
+        # )
+
+        self.tt_model = AutoTokenizer.from_pretrained(
+            path, 
+            bos_id=self.bos_id, 
+            eos_id=self.eos_id, 
+            special_tokens=self.special_tokens
+            )
+
         self.max_seq_len = max_seq_len
 
         self.prompt_template = prompt_template
@@ -161,7 +171,12 @@ class Llama3Tokenizer(ModelTokenizer, Transform):
         add_bos: bool = True,
         add_eos: bool = True,
     ) -> List[int]:
-        return self.tt_model.encode(text=text, add_bos=add_bos, add_eos=add_eos)
+        encoded_text = self.tt_model.encode(text=text)
+        if not add_bos:
+            encoded_text = encoded_text[1:]
+        if add_eos:
+            encoded_text = encoded_text + [SPECIAL_TOKENS["<|end_of_text|>"]]
+        return encoded_text
 
     def decode(
         self,
