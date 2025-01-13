@@ -690,13 +690,13 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
             raise RuntimeError("left_pad_sequence collator is only for inference.")
         collate_fn = _get_component_from_path(self.collate_fn)
 
-        self._sampler = DistributedSampler(
+        self.back_sample = DistributedSampler(
             ds, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=0
         )
-        self._dataloader = DataLoader(
+        self.back_dataloader = DataLoader(
             dataset=ds,
             batch_size=batch_size,
-            sampler=self._sampler,
+            sampler=self.back_sample,
             # dropping last avoids shape issues with compile + flex attention
             drop_last=True,
             collate_fn=partial(
@@ -736,13 +736,13 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
             raise RuntimeError("left_pad_sequence collator is only for inference.")
         collate_fn = _get_component_from_path(self.collate_fn)
 
-        self.sampler = DistributedSampler(
+        self._sampler = DistributedSampler(
             ds, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=0
         )
-        self.dataloader = DataLoader(
+        self._dataloader = DataLoader(
             dataset=ds,
             batch_size=batch_size,
-            sampler=self.sampler,
+            sampler=self._sampler,
             # dropping last avoids shape issues with compile + flex attention
             drop_last=True,
             collate_fn=partial(
@@ -856,7 +856,7 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
         if not self.pbar:
             self.pbar = tqdm(total=self._steps_per_epoch, disable=not (rank == 0))
 
-        for idx, batch in enumerate(self._dataloader):
+        for idx, batch in enumerate(self._dataloader  if self.resource_flag else self.back_dataloader):
             if (
                 self.max_steps_per_epoch is not None
                 and (idx // self._gradient_accumulation_steps)
